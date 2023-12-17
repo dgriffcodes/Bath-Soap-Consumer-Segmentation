@@ -1,0 +1,447 @@
+---
+title: "Final Project"
+author: "David Griffin"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+
+#install necessary packages
+install.packages("tidyverse")
+install.packages("tidyquant")
+install.packages("NbClust")
+install.packages("cluster")
+install.packages("factoextra")
+
+#load necessary packages
+library(tidyverse)
+library(tidyquant)
+library(NbClust)
+library(cluster)
+library(factoextra)
+library(dplyr)
+
+```
+
+```{r importing}
+
+#import data
+BathSoapHousehold <- read.csv("BathSoapHousehold.csv")
+
+#observe data
+view(BathSoapHousehold)
+
+```
+
+```{r pre-processing for purchase behavior}
+
+#select necessary variables
+BathSoapHousehold.purchase.behavior <- BathSoapHousehold |>
+  select(Total.Volume, Vol.Tran, Pur.Vol.No.Promo...., Pur.Vol.Promo.6.., Pur.Vol.Other.Promo.., Brand.Runs, Trans...Brand.Runs, No..of.Brands, Br..Cd..57..144,Br..Cd..55,Br..Cd..272,Br..Cd..286, Br..Cd..24, Br..Cd..481, Br..Cd..352, Br..Cd..5, Others.999) 
+
+#convert to data frame
+BathSoapHousehold.purchase.behavior <- as.data.frame(BathSoapHousehold.purchase.behavior)
+
+#remove rows with missing values
+BathSoapHousehold.purchase.behavior.df <- na.omit(BathSoapHousehold.purchase.behavior)
+
+#normalize all variables to the same scale
+BathSoapHousehold.purchase.behavior.norm <- sapply(BathSoapHousehold.purchase.behavior.df, scale)
+
+#convert normalized data into a data frame
+BathSoapHousehold.purchase.behavior.df.norm <- as.data.frame(BathSoapHousehold.purchase.behavior.norm)
+
+```
+
+```{r hierarchal clustering method for purchase behavior}
+
+#calculate euclidean distance
+d.norm.2 <- dist(BathSoapHousehold.purchase.behavior.norm, method = "euclidean")
+print(d.norm.2,digits=2)
+
+#generate a dendrogram
+hc1.2 <- hclust(d.norm.2)
+plot(hc1.2, ann = FALSE)
+
+#generate a dendrogram with the "average" method
+hc2.2 <- hclust(d.norm.2, method = "average")
+plot(hc2.2, ann = FALSE)
+
+#take out 6 clusters for the dendrogram for comparison
+memb.s.6.2 <- cutree(hc1.2, k = 6)
+memb.s.6.2
+table(memb.s.6.2)
+memb.a.6.2 <- cutree(hc2.2, k = 6)
+memb.a.6.2
+table(memb.a.6.2)
+
+#compare the dendrograms' clusters
+table(memb.s.6.2, memb.a.6.2)
+
+#plot the 6 clusters
+clusplot(BathSoapHousehold.purchase.behavior.norm, memb.s.6.2, color=TRUE, shade=TRUE, labels=2, lines=0)
+clusplot(BathSoapHousehold.purchase.behavior.norm, memb.a.6.2, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#redo the above with 3 clusters
+memb.s.3.2 <- cutree(hc1.2, k = 3)
+memb.s.3.2
+table(memb.s.3.2)
+memb.a.3.2 <- cutree(hc2.2, k = 3)
+memb.a.3.2
+table(memb.a.3.2)
+
+clusplot(BathSoapHousehold.purchase.behavior.norm, memb.s.3.2, color=TRUE, shade=TRUE, labels=2, lines=0)
+clusplot(BathSoapHousehold.purchase.behavior.norm, memb.a.3.2, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#generate a heatmap for the above
+heatmap(as.matrix(BathSoapHousehold.purchase.behavior.norm), Colv = NA, hclustfun = hclust, 
+        col=rev(heat.colors(99)))
+
+```
+
+```{r k-means clustering method for purchase behavior}
+#make 6 clusters with kmeans
+km6.2 <- kmeans(BathSoapHousehold.purchase.behavior.norm, 6)
+km6.2
+
+#plot the 6 clusters
+clusplot(BathSoapHousehold.purchase.behavior.norm, km6.2$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#make 3 clusters with kmeans
+km3.2<-kmeans(BathSoapHousehold.purchase.behavior.norm,3)
+km3.2
+
+#plot the 3 clusters
+clusplot(BathSoapHousehold.purchase.behavior.norm, km3.2$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+```
+
+```{r comparing results from both methods for purchase bahavior}
+
+#create a table for the 3 clusters developed from both methods
+table(km3.2$cluster)
+table(memb.s.3.2)
+
+#compare the two tables
+table(km3.2$cluster, memb.s.3.2)
+
+#show centroids for kmeans with 3 clusters
+km3.2$centers
+
+#show vector of within-cluster sum of squares, one component per cluster
+km3.2$withinss
+
+#between-cluster sum of squares
+km3.2$betweens
+
+#cluster size
+km3.2$size 
+
+#calculate the centroids of the 3 dendogram clusters 
+hc3.centers.2 <- aggregate( . ~ memb.s.3.2, data = BathSoapHousehold.purchase.behavior.df.norm, FUN = mean)
+
+#calculate the distance between the centroids of the 3 clusters from hierarchical
+dist(hc3.centers.2[,2:8])
+
+#calculate the distance between the centroids of the 3 clusters from kmeans
+dist(km3.2$centers)
+
+```
+
+```{r calculating metrics for purchase behavior}
+
+#preparing variable for loop
+within.sum.squares.2 <- 0
+
+#create loop for models with 1 to 10 clusters and save within group sum of squares
+for (i in 1:10) within.sum.squares.2[i] <- sum(kmeans(BathSoapHousehold.purchase.behavior.df.norm, centers=i)$withinss)
+
+#show the values stored
+within.sum.squares.2
+
+#plot to identify most optimal number of clusters (elbow method)
+plot(1:10, within.sum.squares.2[1:10], type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+
+```
+
+```{r pre-processing for basis of purchase}
+
+#select necessary variables
+BathSoapHousehold.basis.of.purchase <- BathSoapHousehold |>
+  select(Avg..Price,Pr.Cat.1,Pr.Cat.2,Pr.Cat.3,Pr.Cat.4, PropCat.5, PropCat.6, PropCat.7, PropCat.8, PropCat.9, PropCat.10, PropCat.11, PropCat.12, PropCat.13, PropCat.14, PropCat.15) 
+
+#convert to data frame
+BathSoapHousehold.basis.of.purchase <- as.data.frame(BathSoapHousehold.basis.of.purchase)
+
+#remove rows with missing values
+BathSoapHousehold.basis.of.purchase.df <- na.omit(BathSoapHousehold.basis.of.purchase)
+
+#normalize all variables to the same scale
+BathSoapHousehold.basis.of.purchase.norm <- sapply(BathSoapHousehold.basis.of.purchase.df, scale)
+
+#convert normalized data into a data frame
+BathSoapHousehold.basis.of.purchase.df.norm <- as.data.frame(BathSoapHousehold.basis.of.purchase.norm)
+
+```
+
+```{r hierarchal clustering method for basis of purchase}
+
+#calculate euclidean distance
+d.norm.3 <- dist(BathSoapHousehold.basis.of.purchase.norm, method = "euclidean")
+print(d.norm.3,digits=2)
+
+#generate a dendrogram
+hc1.3 <- hclust(d.norm.3)
+plot(hc1.3, ann = FALSE)
+
+#generate a dendrogram with the "average" method
+hc2.3 <- hclust(d.norm.3, method = "average")
+plot(hc2.3, ann = FALSE)
+
+#take out 6 clusters for the dendrogram for comparison
+memb.s.6.3 <- cutree(hc1.3, k = 6)
+memb.s.6.3
+table(memb.s.6.3)
+memb.a.6.3 <- cutree(hc2.3, k = 6)
+memb.a.6.3
+table(memb.a.6.3)
+
+#compare the dendrograms' clusters
+table(memb.s.6.3, memb.a.6.3)
+
+#plot the 6 clusters
+clusplot(BathSoapHousehold.basis.of.purchase.norm, memb.s.6.3, color=TRUE, shade=TRUE, labels=2, lines=0)
+clusplot(BathSoapHousehold.basis.of.purchase.norm, memb.a.6.3, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#redo the above with 3 clusters
+memb.s.3.3 <- cutree(hc1.3, k = 3)
+memb.s.3.3
+table(memb.s.3.3)
+memb.a.3.3 <- cutree(hc2.3, k = 3)
+memb.a.3.3
+table(memb.a.3.3)
+
+clusplot(BathSoapHousehold.basis.of.purchase.norm, memb.s.3.3, color=TRUE, shade=TRUE, labels=2, lines=0)
+clusplot(BathSoapHousehold.basis.of.purchase.norm, memb.a.3.3, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#generate a heatmap for the above
+heatmap(as.matrix(BathSoapHousehold.basis.of.purchase.norm), Colv = NA, hclustfun = hclust, 
+        col=rev(heat.colors(99)))
+
+```
+
+```{r k-means clustering method for basis of purchase}
+
+#make 6 clusters with kmeans
+km6.3 <- kmeans(BathSoapHousehold.basis.of.purchase.norm, 6)
+km6.3
+
+#plot the 6 clusters
+clusplot(BathSoapHousehold.basis.of.purchase.norm, km6.3$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#make 3 clusters with kmeans
+km3.3 <-kmeans(BathSoapHousehold.basis.of.purchase.norm,3)
+km3.3
+
+#plot the 3 clusters
+clusplot(BathSoapHousehold.basis.of.purchase.norm, km3.3$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+```
+
+```{r comparing results from both methods for basis of purchase}
+
+#create a table for the 3 clusters developed from both methods
+table(km3.3$cluster)
+table(memb.s.3.3)
+
+#compare the two tables
+table(km3.3$cluster, memb.s.3.3)
+
+#show centroids for kmeans with 3 clusters
+km3.3$centers
+
+#show vector of within-cluster sum of squares, one component per cluster
+km3.3$withinss
+
+#between-cluster sum of squares, i.e. totss-tot.withinss
+km3.3$betweens
+
+#cluster size
+km3.3$size
+
+#calculate the centroids of the 3 dendogram clusters
+hc3.centers.3 <- aggregate( . ~ memb.s.3.3, data = BathSoapHousehold.basis.of.purchase.df.norm, FUN = mean)
+
+#calculate the distance between the centroids of the 3 clusters from hierarchical
+dist(hc3.centers.3[,2:8])
+
+#calculate the distance between the centroids of the 3 clusters from kmeans
+dist(km3.3$centers)
+
+```
+
+```{r calculating metrics for basis of purchase}
+
+#preparing variable for loop
+within.sum.squares.3 <- 0
+
+#create loop for models with 1 to 10 clusters and save within group sum of squares
+for (i in 1:10) within.sum.squares.3[i] <- sum(kmeans(BathSoapHousehold.basis.of.purchase.df.norm, centers=i)$withinss)
+
+#show the values stored
+within.sum.squares.3
+
+#plot to identify most optimal number of clusters (elbow method)
+plot(1:10, within.sum.squares.3[1:10], type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+```
+
+```{r pre-processing with all variables}
+
+#select necessary variables
+BathSoapHousehold <- BathSoapHousehold |>
+  select(-Member.id)
+
+#convert to data frame
+BathSoapHousehold <- as.data.frame(BathSoapHousehold)
+
+#remove rows with missing values
+BathSoapHousehold.df <- na.omit(BathSoapHousehold)
+
+#normalize all variables to the same scale
+BathSoapHousehold.norm <- sapply(BathSoapHousehold.df, scale)
+
+#convert normalized data into a data frame
+BathSoapHousehold.df.norm <- as.data.frame(BathSoapHousehold.norm)
+
+```
+
+```{r hierarchal clustering method with all variables}
+
+#calculate euclidean distance
+d.norm <- dist(BathSoapHousehold.norm, method = "euclidean")
+print(d.norm,digits=2)
+
+#generate a dendrogram
+hc1 <- hclust(d.norm)
+plot(hc1, ann = FALSE)
+
+#generate a dendrogram with the "average" method
+hc2 <- hclust(d.norm, method = "average")
+plot(hc2, ann = FALSE)
+
+#take out 6 clusters for the dendrogram for comparison
+memb.s.6 <- cutree(hc1, k = 6)
+memb.s.6
+table(memb.s.6)
+memb.a.6 <- cutree(hc2, k = 6)
+memb.a.6
+table(memb.a.6)
+
+#compare the dendrograms' clusters
+table(memb.s.6, memb.a.6)
+
+#plot the 6 clusters
+clusplot(BathSoapHousehold.norm, memb.s.6, color=TRUE, shade=TRUE, labels=2, lines=0)
+clusplot(BathSoapHousehold.norm, memb.a.6, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#redo the above with 3 clusters
+memb.s.3 <- cutree(hc1, k = 3)
+memb.s.3
+table(memb.s.3)
+memb.a.3 <- cutree(hc2, k = 3)
+memb.a.3
+table(memb.a.3)
+
+clusplot(BathSoapHousehold.norm, memb.s.3, color=TRUE, shade=TRUE, labels=2, lines=0)
+clusplot(BathSoapHousehold.norm, memb.a.3, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#generate a heatmap for the above
+heatmap(as.matrix(BathSoapHousehold.norm), Colv = NA, hclustfun = hclust, 
+        col=rev(heat.colors(99)))
+
+```
+
+```{r k-means clustering method with all variables}
+
+#make 6 clusters with kmeans
+km6 <- kmeans(BathSoapHousehold.norm, 6)
+km6
+
+#plot the 6 clusters
+clusplot(BathSoapHousehold.norm, km6$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+#make 3 clusters with kmeans
+km3<-kmeans(BathSoapHousehold.norm,3)
+km3
+
+#plot the 3 clusters
+clusplot(BathSoapHousehold.norm, km3$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+
+```
+
+```{r comparing results from both methods with all variables}
+
+#create a table for the 3 clusters developed from both methods
+table(km3$cluster)
+table(memb.s.3)
+
+#compare the two tables
+table(km3$cluster, memb.s.3)
+
+#show centroids for kmeans with 3 clusters
+km3$centers
+
+#compute WWSS for kmeans
+km3$withinss
+
+#compute WCSS for kmeans
+km3$betweens
+
+#compute cluster size for kmeans
+km3$size 
+
+#calculate the centroids of the 3 clusters from hierarchical method
+hc3.centers <- aggregate( . ~ memb.s.3, data = BathSoapHousehold.df.norm, FUN = mean)
+
+#calculate the distance between the centroids of the 3 clusters from hierarchical
+dist(hc3.centers[,2:8])
+
+#calculate the distance between the centroids of the 3 clusters from kmeans
+dist(km3$centers)
+```
+
+```{r calculating metrics with all variables}
+
+#preparing variable for loop
+within.sum.squares <- 0
+
+#create loop for models with 1 to 10 clusters and save within group sum of squares
+for (i in 1:10) within.sum.squares[i] <- sum(kmeans(BathSoapHousehold.df.norm, centers=i)$withinss)
+
+#show the values stored
+within.sum.squares
+
+#plot to identify most optimal number of clusters (elbow method)
+plot(1:10, within.sum.squares[1:10], type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+
+#make an index for demographic variables based on kmeans with 3 clusters
+km3 <- kmeans(BathSoapHousehold.df.norm, 3)
+km3.centroids <- aggregate( . ~ km3$cluster, data = BathSoapHousehold.df.norm, FUN = mean)
+
+km3$centers
+
+plot(c(0), xaxt = 'n', ylab = "", type = "l", 
+     ylim = c(min(km3$centers), max(km3$centers)), xlim = c(0, 8))
+axis(1, at = c(1:45), labels = names(BathSoapHousehold.df))
+for (i in c(1:18))
+  lines(km3$centers[i,], lty = i, lwd = 2, col = ifelse(i %in% c(1, 3, 5),
+                                                        "black", "dark grey"))
+text(x = 0.5, y = km3$centers[, 1], labels = paste("Cluster", c(1:4)))
+
+```
+
